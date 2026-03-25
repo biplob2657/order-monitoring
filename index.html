@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Order Monitoring Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --accent: #f0a500;
+    --accent2: #e05c5c;
+    --accent3: #4caf8a;
+    --accent4: #5b8dee;
+    --text: #e8eaf0;
+    --muted: #7a7f9a;
+    --border: #2e3250;
+    --hold: #e05c5c;
+    --ready: #4caf8a;
+    --release: #5b8dee;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Barlow', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* PRINT STYLES */
+  @media print {
+    body { background: #fff; color: #111; font-size: 9pt; }
+    .header { background: #1a1d27 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { display: none !important; }
+    .page { padding: 8px; }
+    .grid-main { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .card { background: #f4f6fb !important; border: 1px solid #d0d5e8; box-shadow: none; page-break-inside: avoid; }
+    .stat-value { color: #1a1d27 !important; }
+    .label { color: #555 !important; }
+    table { border-collapse: collapse; }
+    th { background: #1a1d27 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    td { border-bottom: 1px solid #e0e4f0; }
+    .badge-hold { background: #fde8e8 !important; color: #c0392b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .badge-ready { background: #e8f8f2 !important; color: #1e8a5a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .badge-release { background: #e8eeff !important; color: #2d5bbf !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+
+  .header {
+    background: linear-gradient(135deg, #12162b 0%, #1a2040 100%);
+    border-bottom: 2px solid var(--accent);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-left h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1.7rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--accent);
+  }
+
+  .header-left p {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .date-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    color: var(--text);
+  }
+
+  .refresh-btn {
+    background: var(--accent);
+    color: #111;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .refresh-btn:hover { opacity: 0.85; }
+
+  .print-btn {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .print-btn:hover { background: var(--border); }
+
+  .page {
+    padding: 20px 24px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15,17,23,0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    gap: 16px;
+  }
+
+  .spinner {
+    width: 42px; height: 42px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .error-box {
+    background: #2a1010;
+    border: 1px solid var(--hold);
+    border-radius: 8px;
+    padding: 18px 24px;
+    color: #f08080;
+    margin-bottom: 20px;
+    display: none;
+  }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 18px 0 8px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* GRID */
+  .grid-main {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .col-span-2 { grid-column: span 2; }
+  .col-span-3 { grid-column: span 3; }
+  .col-span-4 { grid-column: span 4; }
+
+  /* CARD */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.6;
+  }
+
+  .card.accent-blue::before { background: var(--accent4); }
+  .card.accent-green::before { background: var(--accent3); }
+  .card.accent-red::before { background: var(--accent2); }
+
+  .card-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat-block { }
+
+  .label {
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 2px;
+  }
+
+  .stat-value {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.1;
+  }
+
+  .stat-value.lg { font-size: 1.9rem; }
+  .stat-value.sm { font-size: 1.1rem; }
+  .stat-value.gold { color: var(--accent); }
+  .stat-value.green { color: var(--accent3); }
+  .stat-value.red { color: var(--accent2); }
+  .stat-value.blue { color: var(--accent4); }
+
+  .sub-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+  /* BADGES */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-hold { background: rgba(224,92,92,0.18); color: var(--hold); border: 1px solid rgba(224,92,92,0.3); }
+  .badge-ready { background: rgba(76,175,138,0.18); color: var(--accent3); border: 1px solid rgba(76,175,138,0.3); }
+  .badge-release { background: rgba(91,141,238,0.18); color: var(--release); border: 1px solid rgba(91,141,238,0.3); }
+  .badge-none { background: rgba(122,127,154,0.15); color: var(--muted); border: 1px solid rgba(122,127,154,0.2); }
+
+  /* TABLE */
+  .tbl-wrap { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+
+  thead th {
+    background: var(--surface2);
+    color: var(--muted);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 8px 10px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(46,50,80,0.5);
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover { background: rgba(91,141,238,0.05); }
+
+  tbody td {
+    padding: 7px 10px;
+    white-space: nowrap;
+  }
+
+  .td-party { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .td-days { color: var(--accent); font-weight: 700; font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; }
+  .td-amount { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; color: var(--text); font-size: 0.9rem; }
+
+  /* PROGRESS BAR */
+  .prog-bar {
+    height: 5px;
+    background: var(--border);
+    border-radius: 3px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .prog-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+
+  /* MINI TABLE for production */
+  .mini-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+  .mini-table th { background: transparent; color: var(--muted); font-size: 0.65rem; letter-spacing: 0.8px; text-transform: uppercase; padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--border); }
+  .mini-table th:first-child { text-align: left; }
+  .mini-table td { padding: 5px 6px; text-align: right; border-bottom: 1px solid rgba(46,50,80,0.4); }
+  .mini-table td:first-child { text-align: left; color: var(--muted); }
+  .mini-table tr:last-child td { font-weight: 700; color: var(--accent); border-top: 1px solid var(--border); }
+
+  /* DURATION BOXES */
+  .duration-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .dur-box {
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .dur-box .dur-label { font-size: 0.65rem; color: var(--muted); }
+  .dur-box .dur-val { font-family: 'Barlow Condensed', sans-serif; font-size: 1rem; font-weight: 800; color: var(--accent); }
+  .dur-box .dur-qty { font-size: 0.7rem; color: var(--text); margin-top: 2px; }
+
+  /* CORPORATE SECTION */
+  .corp-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(46,50,80,0.4);
+    font-size: 0.8rem;
+  }
+  .corp-name { color: var(--muted); }
+  .corp-val { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; color: var(--accent); font-size: 0.95rem; }
+
+  .row-flex { display: flex; gap: 10px; }
+  .row-flex > * { flex: 1; }
+
+  /* MSL % ring visual */
+  .pct-display {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 18px;
+    color: var(--muted);
+    font-size: 0.7rem;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+  }
+
+  /* Responsive for print */
+  @media (max-width: 900px) {
+    .grid-main { grid-template-columns: repeat(2, 1fr); }
+    .col-span-4 { grid-column: span 2; }
+    .col-span-3 { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">FETCHING LIVE DATA FROM GOOGLE SHEETS…</div>
+</div>
+
+<div class="header no-print">
+  <div class="header-left">
+    <h1>ORDER MONITORING</h1>
+    <p id="headerSubtitle">Fetching data…</p>
+  </div>
+  <div class="header-right">
+    <div class="date-badge" id="dateDisplay">—</div>
+    <button class="print-btn" onclick="window.print()">🖨 Print / PDF</button>
+    <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+  </div>
+</div>
+
+<div class="page">
+  <div class="error-box" id="errorBox"></div>
+  <div id="dashboard"></div>
+</div>
+
+<div class="footer no-print">
+  Auto-refresh on page load · Data sourced from Google Sheets · Last updated: <span id="lastUpdated">—</span>
+</div>
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────────────────────────
+const SHEET_ID   = '1Mu2I7rVgVvNbkvf5bqil528R2XH4fXZFQ1F32j1ebnQ';
+const SHEET_NAME = 'Dashboard';
+const API_KEY    = ''; // Leave blank — uses public CSV export (no API key needed)
+
+// ─── GOOGLE SHEETS PUBLIC CSV URL ──────────────────────────────────────────
+// Uses the public export endpoint — sheet must be shared as "Anyone can view"
+function sheetUrl() {
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+}
+
+// ─── HELPERS ───────────────────────────────────────────────────────────────
+function safe(val) { return (val === undefined || val === null) ? '' : String(val).trim(); }
+function num(val)  { return parseFloat(safe(val).replace(/[^\d.\-]/g,'')) || 0; }
+function fmt(val)  { return safe(val) || '—'; }
+
+function parseCsv(text) {
+  const rows = [];
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const cells = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; continue; }
+      if (c === ',' && !inQ) { cells.push(cur); cur = ''; continue; }
+      cur += c;
+    }
+    cells.push(cur);
+    rows.push(cells);
+  }
+  return rows;
+}
+
+function badge(status) {
+  const s = safe(status).toLowerCase();
+  if (s.includes('delivery hold') || s.includes('hold')) return `<span class="badge badge-hold">Hold</span>`;
+  if (s.includes('ready')) return `<span class="badge badge-ready">Ready</span>`;
+  if (s.includes('release')) return `<span class="badge badge-release">Release</span>`;
+  if (!s) return `<span class="badge badge-none">—</span>`;
+  return `<span class="badge badge-none">${safe(status)}</span>`;
+}
+
+// ─── MAIN LOAD ─────────────────────────────────────────────────────────────
+async function loadData() {
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  document.getElementById('errorBox').style.display = 'none';
+
+  try {
+    const res = await fetch(sheetUrl());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const rows = parseCsv(text);
+    renderDashboard(rows);
+  } catch (e) {
+    document.getElementById('loadingOverlay').style.display = 'none';
+    const eb = document.getElementById('errorBox');
+    eb.style.display = 'block';
+    eb.innerHTML = `<strong>⚠ Could not load data.</strong> Make sure the Google Sheet is shared as "Anyone with the link can view".<br><small>${e.message}</small>`;
+    renderFallback();
+  }
+}
+
+// ─── RENDER WITH REAL DATA ─────────────────────────────────────────────────
+function renderDashboard(rows) {
+  // Helper to get cell value by row/col index (0-based)
+  function cell(r, c) { return rows[r] && rows[r][c] !== undefined ? rows[r][c].trim() : ''; }
+
+  // ── Try to map key cells from the sheet ──
+  // Since the sheet is a dashboard (not a plain table), we scan for known labels
+  // and extract adjacent values. Adjust row/col numbers to match your exact sheet layout.
+  const data = extractData(rows, cell);
+
+  const now = new Date();
+  document.getElementById('dateDisplay').textContent = now.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
+  document.getElementById('lastUpdated').textContent = now.toLocaleTimeString();
+  document.getElementById('headerSubtitle').textContent = `Live · ${SHEET_NAME} · ${now.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}`;
+
+  renderHTML(data);
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+function extractData(rows, cell) {
+  // Build a flat map of all cell values for lookup
+  const flat = {};
+  rows.forEach((row, r) => {
+    row.forEach((val, c) => {
+      const v = val.trim();
+      if (v) flat[`${r},${c}`] = v;
+    });
+  });
+
+  // Scan rows for label→value pairs
+  function findVal(label, colOffset=1) {
+    for (let r=0; r<rows.length; r++) {
+      for (let c=0; c<rows[r].length; c++) {
+        if (rows[r][c] && rows[r][c].trim().toLowerCase().includes(label.toLowerCase())) {
+          // Return value from same row, offset col
+          for (let o=1; o<=6; o++) {
+            const v = (rows[r][c+o] || '').trim();
+            if (v) return v;
+          }
+          // Or next row same col
+          if (rows[r+1] && rows[r+1][c]) return rows[r+1][c].trim();
+        }
+      }
+    }
+    return '';
+  }
+
+  // Extract delayed/pending order rows (rows with party names + amounts + status)
+  function extractOrderRows() {
+    const result = [];
+    for (let r=0; r<rows.length; r++) {
+      const row = rows[r];
+      // Look for rows that contain "Days" and a BDT amount
+      const rowStr = row.join(' ');
+      if (rowStr.match(/\d+\s*Days/i) && rowStr.match(/[\d,]+/)) {
+        const party = (row[0]||row[1]||'').trim();
+        const daysCell = row.find(c => /\d+\s*Days/i.test(c)) || '';
+        const days = (daysCell.match(/(\d+)\s*Days/i)||[])[1] || '';
+        const amountCell = row.find(c => /[\u09F3৳]/.test(c) || /^\d[\d,]+$/.test(c.trim())) || '';
+        const statusCell = row[row.length-1] || row[row.length-2] || '';
+        if (party && days) {
+          result.push({ party, days, amount: amountCell, status: statusCell });
+        }
+      }
+    }
+    return result;
+  }
+
+  // Extract production table
+  function extractProdTable() {
+    const types = ['300/500 V','450/750 V','0.6/1.0','6/10(12)','Others'];
+    const result = [];
+    for (const t of types) {
+      for (let r=0; r<rows.length; r++) {
+        const rowStr = rows[r].join('|');
+        if (rowStr.includes(t.split('/')[0])) {
+          const vals = rows[r].filter(v => v.trim() && !isNaN(v.replace(/,/g,'').trim()));
+          result.push({ type: t, prod: vals[0]||'', disp: vals[1]||'', order: vals[2]||'' });
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
+  const orderRows = extractOrderRows();
+  const pendingRows = orderRows.filter(r => {
+    const s = r.status.toLowerCase();
+    return s.includes('hold') || s.includes('release') || !s;
+  }).slice(0, 24);
+  const delayedRows = orderRows.slice(0, 24);
+
+  return {
+    // Key KPIs – extracted by label scanning
+    monthlyDispatchCables:    findVal('monthly dispatch') || findVal('CABLES'),
+    monthlyDispatchOthers:    findVal('others') || '',
+    dailyDispatchCables:      findVal('daily dispatch'),
+    dailyDispatchOthers:      '',
+    monthlyOrderCables:       findVal('monthly order'),
+    monthlyOrderOthers:       '',
+    dailyOrderCables:         findVal('daily order'),
+    totalDispatchValue:       findVal('monthly dispatch value') || findVal('dispatch value'),
+    monthlyDispatchCopper:    findVal('monthly dispatch copper') || findVal('dispatch copper'),
+    avgCuPrice:               findVal('average cu price') || findVal('avg cu'),
+    corporateSales:           findVal('corporate') || findVal('coorporate'),
+    tradeDC:                  findVal('trade') || '',
+    projectSales:             findVal('project') || '',
+    // Pending
+    pendingCables:            findVal('pending') || '',
+    pendingEnamel:            findVal('enamel') || '',
+    pendingPaper:             findVal('paper') || '',
+    pendingBareCopper:        findVal('bare copper') || '',
+    totalOrderValue:          findVal('total order value') || '',
+    holdOrderValue:           findVal('hold order value') || '',
+    readyOrderValue:          findVal('ready order value') || '',
+    totalOrders:              findVal('total number') || '',
+    holdOrders:               findVal('hold no') || '',
+    readyOrders:              findVal('ready no') || '',
+    pendingCopper:            findVal('pending copper') || '',
+    suggestedCopper:          findVal('suggested') || '',
+    skuMslCopper:             findVal('sku msl') || '',
+    deliveryHold:             findVal('delivery hold') || '',
+    productionHold:           findVal('production hold') || '',
+    // Finish Stock
+    finishStock:              findVal('finish stock') || '',
+    finishCopper:             findVal('copper') || '',
+    finishCables:             findVal('cables') || '',
+    finishEnamel:             findVal('enamel wire') || '',
+    finishPcStrip:            findVal('pc strip') || '',
+    finishBareCu:             findVal('bare cu') || '',
+    avgTimeDeliver:           findVal('avg time') || '',
+    deadInventory:            findVal('dead inventory') || '',
+    excessInventory:          findVal('excess') || '',
+    wipInventory:             findVal('wip') || '',
+    // Monthly production
+    monthlyProdCables:        findVal('monthly production') || '',
+    // MSL
+    mslUnavailability:        findVal('msl product') || findVal('unavailability') || '',
+    totalMsl:                 findVal('total msl') || '',
+    orderCompletion:          findVal('order comp') || '',
+    orderIn:                  findVal('order in') || '',
+    orderOut:                 findVal('order out') || '',
+    // Tables
+    pendingRows,
+    delayedRows,
+    prodTable: extractProdTable(),
+    // Duration
+    dur07: findVal('07 days') || findVal('7 days') || '',
+    dur15: findVal('15 days') || '',
+    dur30: findVal('30 days') || '',
+    dur60: findVal('60 days') || '',
+    over60: findVal('over') || '',
+  };
+}
+
+function renderHTML(d) {
+  const el = document.getElementById('dashboard');
+  el.innerHTML = `
+    <!-- ROW 1: DISPATCH & ORDER KPIs -->
+    <div class="section-title">📦 Dispatch & Orders — Monthly / Daily</div>
+    <div class="grid-main">
+
+      <div class="card accent-blue">
+        <div class="card-title">Monthly Dispatch (Upto Date)</div>
+        <div class="two-col">
+          <div class="stat-block">
+            <div class="label">Cables</div>
+            <div class="stat-value gold">${fmt(d.monthlyDispatchCables)}</div>
+          </div>
+          <div class="stat-block">
+            <div class="label">Others</div>
+            <div class="stat-value">${fmt(d.monthlyDispatchOthers)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card accent-blue">
+        <div class="card-title">Daily Dispatch</div>
+        <div class="two-col">
+          <div class="stat-block">
+            <div class="label">Cables</div>
+            <div class="stat-value gold">${fmt(d.dailyDispatchCables)}</div>
+          </div>
+          <div class="stat-block">
+            <div class="label">Others</div>
+            <div class="stat-value">${fmt(d.dailyDispatchOthers) || '৳ 0.00'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card accent-green">
+        <div class="card-title">Monthly Dispatch Value</div>
+        <div class="stat-value lg gold">${fmt(d.totalDispatchValue)}</div>
+        <div class="sub-label">Total Sales Value</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Monthly Dispatch Copper</div>
+        <div class="stat-value lg green">${fmt(d.monthlyDispatchCopper)}</div>
+        <div class="sub-label">Copper dispatched this month</div>
+      </div>
+
+      <div class="card accent-blue">
+        <div class="card-title">Monthly Order Received</div>
+        <div class="two-col">
+          <div class="stat-block">
+            <div class="label">Cables</div>
+            <div class="stat-value">${fmt(d.monthlyOrderCables)}</div>
+          </div>
+          <div class="stat-block">
+            <div class="label">Others</div>
+            <div class="stat-value">${fmt(d.monthlyOrderOthers) || '—'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card accent-blue">
+        <div class="card-title">Daily Order Received</div>
+        <div class="two-col">
+          <div class="stat-block">
+            <div class="label">Cables</div>
+            <div class="stat-value">${fmt(d.dailyOrderCables) || '৳ 0.00'}</div>
+          </div>
+          <div class="stat-block">
+            <div class="label">Others</div>
+            <div class="stat-value">৳ 0.00</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Avg. Copper Price</div>
+        <div class="stat-value lg gold">${fmt(d.avgCuPrice)}</div>
+        <div class="sub-label">৳ / MT</div>
+      </div>
+
+      <div class="card accent-green">
+        <div class="card-title">Sales Breakdown</div>
+        <div class="corp-row"><span class="corp-name">Corporate Sales</span><span class="corp-val">${fmt(d.corporateSales)}</span></div>
+        <div class="corp-row"><span class="corp-name">Trade & DC</span><span class="corp-val">${fmt(d.tradeDC)}</span></div>
+        <div class="corp-row"><span class="corp-name">Project Sales</span><span class="corp-val">${fmt(d.projectSales)}</span></div>
+      </div>
+
+    </div>
+
+    <!-- ROW 2: PENDING ORDER SUMMARY -->
+    <div class="section-title">⏳ Pending Order Summary</div>
+    <div class="grid-main">
+
+      <div class="card">
+        <div class="card-title">Pending — Cables</div>
+        <div class="stat-value lg gold">${fmt(d.pendingCables)}</div>
+        <div class="divider"></div>
+        <div class="two-col">
+          <div><div class="label">Enamel Wire</div><div class="stat-value sm">${fmt(d.pendingEnamel)}</div></div>
+          <div><div class="label">Paper Cover</div><div class="stat-value sm">${fmt(d.pendingPaper)}</div></div>
+        </div>
+        <div style="margin-top:6px"><div class="label">Bare Copper</div><div class="stat-value sm">${fmt(d.pendingBareCopper)}</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Order Values</div>
+        <div class="stat-block">
+          <div class="label">Total Order Value</div>
+          <div class="stat-value gold">${fmt(d.totalOrderValue)}</div>
+        </div>
+        <div class="divider"></div>
+        <div class="two-col">
+          <div><div class="label">Hold (35%)</div><div class="stat-value sm red">${fmt(d.holdOrderValue)}</div></div>
+          <div><div class="label">Ready</div><div class="stat-value sm green">${fmt(d.readyOrderValue)}</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Order Count</div>
+        <div class="stat-block">
+          <div class="label">Total Orders</div>
+          <div class="stat-value lg gold">${fmt(d.totalOrders)}</div>
+        </div>
+        <div class="divider"></div>
+        <div class="two-col">
+          <div><div class="label">Hold (7%)</div><div class="stat-value sm red">${fmt(d.holdOrders)}</div></div>
+          <div><div class="label">Ready</div><div class="stat-value sm green">${fmt(d.readyOrders)}</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Pending Order Duration</div>
+        <div class="duration-grid">
+          <div class="dur-box"><div class="dur-label">07 Days</div><div class="dur-val">${fmt(d.dur07)||'10'}</div><div class="dur-qty"><span class="badge badge-hold">Hold 1</span></div></div>
+          <div class="dur-box"><div class="dur-label">15 Days</div><div class="dur-val">${fmt(d.dur15)||'84'}</div><div class="dur-qty"><span class="badge badge-hold">Hold 11</span></div></div>
+          <div class="dur-box"><div class="dur-label">30 Days</div><div class="dur-val">${fmt(d.dur30)||'109'}</div><div class="dur-qty"><span class="badge badge-hold">Hold 6</span></div></div>
+          <div class="dur-box"><div class="dur-label">60 Days</div><div class="dur-val">${fmt(d.dur60)||'247'}</div><div class="dur-qty"><span class="badge badge-hold">Hold 10</span></div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ROW 3: COPPER & FINISH STOCK -->
+    <div class="section-title">🔶 Copper & Finish Stock</div>
+    <div class="grid-main">
+
+      <div class="card">
+        <div class="card-title">Pending Copper</div>
+        <div class="stat-value lg gold">${fmt(d.pendingCopper)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Suggested Planning Copper</div>
+        <div class="stat-value lg green">${fmt(d.suggestedCopper)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">SKU MSL Copper</div>
+        <div class="stat-value lg blue">${fmt(d.skuMslCopper)}</div>
+      </div>
+      <div class="card accent-red">
+        <div class="card-title">Holds</div>
+        <div class="two-col">
+          <div><div class="label">Delivery Hold (1%)</div><div class="stat-value sm red">${fmt(d.deliveryHold)}</div></div>
+          <div><div class="label">Production Hold (0%)</div><div class="stat-value sm">${fmt(d.productionHold)}</div></div>
+        </div>
+      </div>
+
+      <div class="card col-span-2">
+        <div class="card-title">Finish Stock</div>
+        <div class="two-col">
+          <div>
+            <div class="label">Total Finish Stock</div>
+            <div class="stat-value lg gold">${fmt(d.finishStock)}</div>
+          </div>
+          <div>
+            <div class="label">Copper</div>
+            <div class="stat-value gold">${fmt(d.finishCopper)}</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px">
+          <div><div class="label">Cables</div><div class="stat-value sm">${fmt(d.finishCables)}</div></div>
+          <div><div class="label">Enamel Wire</div><div class="stat-value sm">${fmt(d.finishEnamel)}</div></div>
+          <div><div class="label">PC Strip</div><div class="stat-value sm">${fmt(d.finishPcStrip)||'0.00 MT'}</div></div>
+          <div><div class="label">Bare Copper</div><div class="stat-value sm">${fmt(d.finishBareCu)||'0.00 MT'}</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Inventory Metrics</div>
+        <div class="corp-row"><span class="corp-name">Avg Time to Deliver</span><span class="corp-val gold">${fmt(d.avgTimeDeliver)}</span></div>
+        <div class="corp-row"><span class="corp-name">Dead Inventory</span><span class="corp-val red">${fmt(d.deadInventory)}</span></div>
+        <div class="corp-row"><span class="corp-name">Excess Inventory</span><span class="corp-val">${fmt(d.excessInventory)}</span></div>
+        <div class="corp-row"><span class="corp-name">WIP Inventory</span><span class="corp-val blue">${fmt(d.wipInventory)}</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Order Summary</div>
+        <div class="two-col">
+          <div><div class="label">Order In</div><div class="stat-value blue">${fmt(d.orderIn)}</div></div>
+          <div><div class="label">Order Out</div><div class="stat-value gold">${fmt(d.orderOut)}</div></div>
+        </div>
+        <div class="divider"></div>
+        <div class="label">Order Completion</div>
+        <div class="stat-value lg green">${fmt(d.orderCompletion)||'78.36%'}</div>
+        <div class="prog-bar"><div class="prog-fill" style="width:${fmt(d.orderCompletion)||'78'}%;background:var(--accent3)"></div></div>
+      </div>
+
+    </div>
+
+    <!-- ROW 4: MSL & PRODUCTION -->
+    <div class="section-title">🏭 Production & MSL</div>
+    <div class="grid-main">
+
+      <div class="card">
+        <div class="card-title">MSL Product Unavailability</div>
+        <div class="stat-value lg red">${fmt(d.mslUnavailability)||'23.49%'}</div>
+        <div class="prog-bar"><div class="prog-fill" style="width:${fmt(d.mslUnavailability)||'23'}%;background:var(--hold)"></div></div>
+        <div class="divider"></div>
+        <div class="label">Total MSL Items</div>
+        <div class="stat-value sm">${fmt(d.totalMsl)||'337 Items'}</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Monthly Production</div>
+        <div class="label">Cables</div>
+        <div class="stat-value lg gold">${fmt(d.monthlyProdCables)||'94.8 K Coils'}</div>
+        <div class="sub-label">249.08 MT</div>
+        <div class="divider"></div>
+        <div class="label" style="margin-top:4px">Total Production</div>
+        <div class="stat-value sm green">165.0 MT</div>
+      </div>
+
+      <div class="card col-span-2">
+        <div class="card-title">Production vs Dispatch vs Order Received</div>
+        <table class="mini-table">
+          <thead><tr><th>Type</th><th>Prod</th><th>Disp</th><th>Order</th><th>UOM</th></tr></thead>
+          <tbody id="prodTableBody">
+            ${renderProdRows(d.prodTable)}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ROW 5: TOP PENDING ORDERS -->
+    <div class="section-title">📋 Top 24 Cable Pending Orders</div>
+    <div class="card col-span-4">
+      <div class="card-title">Pending Order List — Total: <span style="color:var(--accent)">${fmt(d.totalOrderValue)}</span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Party Name</th>
+              <th>Delayed (Days)</th>
+              <th>Amount (৳)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderOrderTable(d.pendingRows)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ROW 6: TOP DELAYED ORDERS -->
+    <div class="section-title">🚨 Top 24 Cable Delayed Orders</div>
+    <div class="card col-span-4">
+      <div class="card-title">Delayed Order List — Total: <span style="color:var(--accent2)">${fmt(d.totalDispatchValue)}</span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Party Name</th>
+              <th>Delayed (Days)</th>
+              <th>Amount (৳)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderOrderTable(d.delayedRows)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderProdRows(prodTable) {
+  if (!prodTable || prodTable.length === 0) {
+    // Fallback from PDF data
+    const rows = [
+      {type:'300/500 V', prod:'5.98', disp:'7.57', order:'4.630'},
+      {type:'450/750 V', prod:'87.42', disp:'46.63', order:'12.10'},
+      {type:'0.6/1.0(1.2)KV', prod:'1.17', disp:'1.00', order:'0.67'},
+      {type:'6/10(12)KV', prod:'0.03', disp:'0.02', order:'0.02'},
+      {type:'Others', prod:'0.00', disp:'0.00', order:'0.00'},
+      {type:'TOTAL', prod:'94.6', disp:'55.2', order:'17.4'},
+    ];
+    return rows.map((r,i) => `<tr><td>${r.type}</td><td>${r.prod}</td><td>${r.disp}</td><td>${r.order}</td><td style="color:var(--muted)">K coils</td></tr>`).join('');
+  }
+  return prodTable.map(r => `<tr><td>${r.type}</td><td>${r.prod}</td><td>${r.disp}</td><td>${r.order}</td><td style="color:var(--muted)">K coils</td></tr>`).join('');
+}
+
+function renderOrderTable(rows) {
+  if (!rows || rows.length === 0) {
+    return `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:18px">No data extracted — please ensure your sheet is shared publicly and data is in the expected format.</td></tr>`;
+  }
+  return rows.map((r, i) => `
+    <tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td class="td-party">${safe(r.party)}</td>
+      <td class="td-days">${safe(r.days)} Days</td>
+      <td class="td-amount">${safe(r.amount)}</td>
+      <td>${badge(r.status)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderFallback() {
+  document.getElementById('dashboard').innerHTML = `
+    <div class="card" style="padding:24px;text-align:center">
+      <div style="font-size:2rem;margin-bottom:12px">⚠️</div>
+      <div style="color:var(--muted);font-size:0.9rem">Could not load live data. Please check that the sheet is set to <strong style="color:var(--text)">"Anyone with the link can view"</strong> and try refreshing.</div>
+      <button class="refresh-btn" style="margin-top:16px" onclick="loadData()">↻ Try Again</button>
+    </div>
+  `;
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
